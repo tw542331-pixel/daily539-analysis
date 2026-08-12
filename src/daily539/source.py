@@ -51,7 +51,7 @@ def _records(payload: Any) -> Iterable[dict[str, Any]]:
         return payload
     if not isinstance(payload, dict):
         raise ValueError("unexpected official response")
-    for key in ("content", "data", "result", "results"):
+    for key in ("daily539Res", "content", "data", "result", "results"):
         value = payload.get(key)
         if isinstance(value, list):
             return value
