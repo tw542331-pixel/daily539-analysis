@@ -23,7 +23,8 @@ def render(draws: list[Draw], picks: list[tuple[int, ...]], strategy: dict, rand
                   "- 連號鄰接數：" + str(dict(sorted(stats["consecutive"].items()))),
                   "- 與前期重號數：" + str(dict(sorted(stats["repeats"].items()))),
                   "- 常見二碼：" + "、".join(f"{a:02d}-{b:02d}({c})" for (a, b), c in stats["pairs"].most_common(10))]
-    lines += ["", "## 滾動回測", "", "> 每一期只使用該期以前資料；隨機基準同樣每期兩組。",
+    tested_periods = sum(strategy.values())
+    lines += ["", f"## 滾動回測（最近 {tested_periods} 期）", "", "> 每一期只使用該期以前資料；隨機基準同樣每期兩組。",
               "", f"- 分析策略命中分布：{dict(sorted(strategy.items()))}",
               f"- 隨機選號命中分布：{dict(sorted(random_hits.items()))}", "",
               "> 彩券結果為隨機事件，本報告僅供統計研究，不保證獲利。", ""]
@@ -33,4 +34,3 @@ def render(draws: list[Draw], picks: list[tuple[int, ...]], strategy: dict, rand
 def save_report(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
-

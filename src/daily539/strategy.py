@@ -22,14 +22,26 @@ def select(draws: list[Draw], count: int = 2, seed: int | None = None) -> list[t
     stats = snapshot(draws[-100:])
     interval = sum_interval(draws)
     rng = random.Random(seed)
-    candidates = [combo for combo in combinations(range(1, 40), 5) if valid_combo(combo, interval)]
-    rng.shuffle(candidates)
-    candidates.sort(key=lambda c: sum(stats["frequencies"][n] + min(stats["missing"][n], 10) / 4 for n in c), reverse=True)
-    selected: list[tuple[int, ...]] = []
-    for combo in candidates:
-        if not selected or len(set(combo) & set(selected[0])) <= 2:
-            selected.append(combo)
-        if len(selected) == count:
-            break
-    return selected
+    scores = {n: stats["frequencies"][n] + min(stats["missing"][n], 10) / 4 for n in range(1, 40)}
 
+    # The previous implementation rebuilt and sorted all C(39, 5) = 575,757
+    # combinations for every historical draw in a backtest. Rank the numbers
+    # first and search a compact pool; expand only if the constraints cannot
+    # produce enough distinct picks.
+    tie_breaks = {n: rng.random() for n in range(1, 40)}
+    ranked = sorted(range(1, 40), key=lambda n: (scores[n], tie_breaks[n]), reverse=True)
+    for pool_size in (16, 24, 39):
+        candidates = []
+        for values in combinations(ranked[:pool_size], 5):
+            combo = tuple(sorted(values))
+            if valid_combo(combo, interval):
+                candidates.append(combo)
+        rng.shuffle(candidates)
+        candidates.sort(key=lambda combo: sum(scores[n] for n in combo), reverse=True)
+        selected: list[tuple[int, ...]] = []
+        for combo in candidates:
+            if all(len(set(combo) & set(previous)) <= 2 for previous in selected):
+                selected.append(combo)
+            if len(selected) == count:
+                return selected
+    raise ValueError("selection constraints produced too few combinations")

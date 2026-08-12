@@ -1,5 +1,7 @@
 from datetime import date, timedelta
 
+import pytest
+
 from daily539.analysis import snapshot
 from daily539.backtest import run
 from daily539.models import Draw
@@ -55,3 +57,16 @@ def test_backtest_never_passes_current_draw(monkeypatch):
     assert lengths == list(range(10, 30))
     assert len(rows) == 20
 
+
+def test_backtest_can_limit_recent_periods(monkeypatch):
+    history = draws(30)
+    lengths = []
+    monkeypatch.setattr("daily539.backtest.select", lambda prior, seed: lengths.append(len(prior)) or [(1, 2, 20, 21, 39)] * 2)
+    _, _, rows = run(history, warmup=10, periods=5)
+    assert lengths == list(range(25, 30))
+    assert len(rows) == 5
+
+
+def test_backtest_rejects_non_positive_periods():
+    with pytest.raises(ValueError, match="positive"):
+        run(draws(30), periods=0)

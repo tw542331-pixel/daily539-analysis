@@ -9,6 +9,7 @@ permissions:
 jobs:
   update:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -27,4 +28,3 @@ jobs:
           git add data reports
           git diff --cached --quiet || git commit -m "data: update Daily 539 analysis"
           git push
-
