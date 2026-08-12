@@ -1,0 +1,30 @@
+name: Update Daily 539 analysis
+on:
+  workflow_dispatch:
+  schedule:
+    # Taiwan draw days (Mon-Sat), after the draw; GitHub cron is UTC.
+    - cron: "30 13 * * 1-6"
+permissions:
+  contents: write
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+      - run: pytest
+      - run: python -m daily539.cli
+        env:
+          PYTHONPATH: src
+      - name: Commit updated data
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add data reports
+          git diff --cached --quiet || git commit -m "data: update Daily 539 analysis"
+          git push
+
