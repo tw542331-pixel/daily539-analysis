@@ -7,7 +7,7 @@ from daily539.backtest import run
 from daily539.models import Draw
 from daily539.report import render
 from daily539.source import _parse_record, _records
-from daily539.strategy import select, valid_combo
+from daily539.strategy import combo_factors, select, valid_combo
 
 
 def draws(count=130):
@@ -57,14 +57,24 @@ def test_statistics_and_constraints():
     assert sum(snapshot(history[-10:])["frequencies"].values()) == 50
     picks = select(history, seed=1)
     assert len(picks) == 2 and all(valid_combo(p, (60, 140)) for p in picks)
-    assert len(set(picks[0]) & set(picks[1])) <= 2
+    assert not (set(picks[0]) & set(picks[1]))
+
+
+def test_rebuilt_strategy_is_deterministic_and_explainable():
+    history = draws()
+    first = select(history, seed=1)
+    assert first == select(history, seed=999)
+    factors = combo_factors(history, first[0])
+    assert set(factors) == {"number", "pair", "sum", "tail", "repeat", "total"}
+    assert factors["total"] == pytest.approx(sum(value for key, value in factors.items() if key != "total"))
 
 
 def test_backtest_never_passes_current_draw(monkeypatch):
     history = draws(30)
     lengths = []
     monkeypatch.setattr("daily539.backtest.select", lambda prior, seed: lengths.append(len(prior)) or [(1, 2, 20, 21, 39)] * 2)
-    _, _, rows = run(history, warmup=10)
+    monkeypatch.setattr("daily539.backtest.select_legacy", lambda prior, seed: [(1, 2, 20, 21, 39)] * 2)
+    _, _, _, rows = run(history, warmup=10)
     assert lengths == list(range(10, 30))
     assert len(rows) == 20
 
@@ -73,7 +83,8 @@ def test_backtest_can_limit_recent_periods(monkeypatch):
     history = draws(30)
     lengths = []
     monkeypatch.setattr("daily539.backtest.select", lambda prior, seed: lengths.append(len(prior)) or [(1, 2, 20, 21, 39)] * 2)
-    _, _, rows = run(history, warmup=10, periods=5)
+    monkeypatch.setattr("daily539.backtest.select_legacy", lambda prior, seed: [(1, 2, 20, 21, 39)] * 2)
+    _, _, _, rows = run(history, warmup=10, periods=5)
     assert lengths == list(range(25, 30))
     assert len(rows) == 5
 
