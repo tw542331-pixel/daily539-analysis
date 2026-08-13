@@ -5,6 +5,7 @@ import pytest
 from daily539.analysis import snapshot
 from daily539.backtest import run
 from daily539.models import Draw
+from daily539.report import render
 from daily539.source import _parse_record, _records
 from daily539.strategy import select, valid_combo
 
@@ -39,6 +40,16 @@ def test_official_response_parser_supports_daily539res_envelope():
     assert draw.period == "115000195"
     assert draw.date == date(2026, 8, 13)
     assert draw.numbers == (7, 12, 17, 20, 32)
+
+
+def test_report_displays_latest_draw_result():
+    latest = Draw(date(2026, 8, 13), "115000195", (7, 12, 17, 20, 32))
+    report = render([latest], [(6, 8, 21, 25, 36)], {}, {})
+
+    assert "## 最新開獎結果" in report
+    assert "- 開獎日期：2026-08-13" in report
+    assert "- 期別：115000195" in report
+    assert "- 開獎號碼：07 12 17 20 32" in report
 
 
 def test_statistics_and_constraints():

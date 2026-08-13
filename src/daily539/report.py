@@ -6,7 +6,12 @@ from .models import Draw
 
 def render(draws: list[Draw], picks: list[tuple[int, ...]], strategy: dict, random_hits: dict) -> str:
     analyses = windows(draws)
-    lines = ["# 今彩539 最新分析", "", f"資料截止：{draws[-1].date.isoformat()}（{len(draws)} 期）", "",
+    latest = draws[-1]
+    lines = ["# 今彩539 最新分析", "", f"資料截止：{latest.date.isoformat()}（{len(draws)} 期）", "",
+             "## 最新開獎結果", "",
+             f"- 開獎日期：{latest.date.isoformat()}",
+             f"- 期別：{latest.period}",
+             "- 開獎號碼：" + " ".join(f"{n:02d}" for n in latest.numbers), "",
              "## 建議組合", ""]
     lines += [f"- {' '.join(f'{n:02d}' for n in pick)}" for pick in picks]
     for label, stats in analyses.items():
