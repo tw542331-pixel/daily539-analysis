@@ -13,7 +13,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="台灣今彩539分析")
     parser.add_argument("--no-fetch", action="store_true", help="只使用本機資料")
     parser.add_argument("--source-url", help="替換官方相容端點")
-    parser.add_argument("--seed", type=int, default=539)
+    parser.add_argument("--seed", type=int, default=539, help="舊版與隨機回測基準種子")
     parser.add_argument("--backtest-periods", type=int, default=365, help="滾動回測最近期數")
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[2]
@@ -30,10 +30,15 @@ def main() -> None:
     if len(draws) < 10:
         raise SystemExit("資料不足；請先連線官方端點取得資料")
     picks = select(draws, seed=args.seed)
-    strategy, random_hits, rows = run(draws, warmup=min(100, max(10, len(draws) // 2)),
-                                      seed=args.seed, periods=args.backtest_periods)
+    strategy, legacy_hits, random_hits, rows = run(
+        draws, warmup=min(100, max(10, len(draws) // 2)),
+        seed=args.seed, periods=args.backtest_periods,
+    )
     save_results(root / "data" / "results.csv", rows)
-    save_report(root / "reports" / "latest.md", render(draws, picks, strategy, random_hits))
+    save_report(
+        root / "reports" / "latest.md",
+        render(draws, picks, strategy, random_hits, legacy_hits),
+    )
     print("建議：", *(" ".join(f"{n:02d}" for n in pick) for pick in picks), sep="\n")
 
 
