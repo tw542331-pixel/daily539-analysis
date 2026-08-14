@@ -2,8 +2,11 @@ name: Update Daily 539 analysis
 on:
   workflow_dispatch:
   schedule:
-    # Taiwan draw days (Mon-Sat), after the draw; GitHub cron is UTC.
+    # Taiwan draw days (Mon-Sat). Retry at 21:15, 21:30, 21:45 and 22:00 (UTC+8).
+    - cron: "15 13 * * 1-6"
     - cron: "30 13 * * 1-6"
+    - cron: "45 13 * * 1-6"
+    - cron: "0 14 * * 1-6"
 permissions:
   contents: write
 jobs:
