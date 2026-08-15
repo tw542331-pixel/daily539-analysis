@@ -28,9 +28,13 @@ jobs:
       - name: Verify today's official draw is available
         shell: bash
         run: |
-          today="$(TZ=Asia/Taipei date +%F)"
-          if ! grep -q "資料截止：${today}" reports/latest.md; then
-            echo "::error::台彩官方資料尚未更新到 ${today}，等待下一次排程重試。"
+          hour="$(TZ=Asia/Taipei date +%H)"
+          expected_date="$(TZ=Asia/Taipei date +%F)"
+          if [ "$hour" -lt 12 ]; then
+            expected_date="$(TZ=Asia/Taipei date -d 'yesterday' +%F)"
+          fi
+          if ! grep -q "資料截止：${expected_date}" reports/latest.md; then
+            echo "::error::台彩官方資料尚未更新到 ${expected_date}，等待下一次排程重試。"
             exit 1
           fi
       - name: Commit updated data
