@@ -23,6 +23,8 @@ GET https://api.taiwanlottery.com/TLCAPIWeB/Lottery/Daily539Result?month=YYYY-MM
 - 最近 365 期向前回測的第 `t` 期只使用 `[:t]`，並同時呈現重作模型、舊版模型及每期兩組不重複隨機選號的最佳命中數。
 - 報告明確標示下一期預測目標日，並公開上一期對獎、實戰累積投入、獎金、淨損益及 ROI，避免把「中 2 碼」誤認為獲利。
 - 回測同時呈現每注命中數、獎金與 ROI；相對分數只用於排序，不是假裝成中獎機率或獲利率。
+- 模型以「至少中 3 碼」作為唯一升級目標；若最近 365 期未達單尾 5% 的統計門檻，報告會明確標示為研究候選、不建議下注。
+- 新策略先在較舊資料選型，再用未參與選型的最近 365 期獨立驗證；完整方法與失敗實驗保留於 `reports/three-hit-validation.md`。
 - 結果寫至 `reports/latest.md`；逐期回測明細寫至 `data/results.csv`，歷史資料快取於 `data/draws.csv`，實際發布過的候選組合保留於 `data/predictions.csv`。
 
 ## 安裝與執行

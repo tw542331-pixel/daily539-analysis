@@ -11,6 +11,8 @@ from daily539.performance import (Prediction, load_predictions, next_draw_date,
 from daily539.report import render
 from daily539.source import _parse_record, _records
 from daily539.strategy import combo_factors, select, valid_combo
+from daily539.validation import (THREE_PLUS_RANDOM_PROBABILITY,
+                                 assess_three_hit, promotion_threshold)
 
 
 def draws(count=130):
@@ -54,6 +56,8 @@ def test_report_displays_latest_draw_result():
     assert "- 期別：115000195" in report
     assert "- 開獎號碼：07 12 17 20 32" in report
     assert "- 目標開獎日：2026-08-14" in report
+    assert "## 中 3 碼目標判定" in report
+    assert "### 研究候選組合（未達投注門檻）" in report
 
 
 def test_next_draw_date_skips_sunday():
@@ -145,3 +149,20 @@ def test_backtest_can_limit_recent_periods(monkeypatch):
 def test_backtest_rejects_non_positive_periods():
     with pytest.raises(ValueError, match="positive"):
         run(draws(30), periods=0)
+
+
+def test_three_hit_random_probability_and_promotion_threshold():
+    assert THREE_PLUS_RANDOM_PROBABILITY == pytest.approx(0.0200813885)
+    assert promotion_threshold(365) == 13
+
+
+def test_three_hit_gate_rejects_current_result_and_accepts_threshold():
+    current = assess_three_hit({0: 73, 1: 205, 2: 82, 3: 5})
+    assert current.periods == 365
+    assert current.successes == 5
+    assert current.expected == pytest.approx(7.3297068)
+    assert current.threshold == 13
+    assert not current.passed
+
+    promoted = assess_three_hit({0: 352, 3: 13})
+    assert promoted.passed
