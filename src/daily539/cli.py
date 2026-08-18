@@ -3,6 +3,8 @@ from datetime import date, timedelta
 from pathlib import Path
 
 from .backtest import run, save_results
+from .performance import (load_predictions, record_prediction, save_predictions,
+                          settle_predictions)
 from .report import render, save_report
 from .source import TaiwanLotterySource
 from .storage import load_draws, save_draws
@@ -30,6 +32,13 @@ def main() -> None:
     if len(draws) < 10:
         raise SystemExit("資料不足；請先連線官方端點取得資料")
     picks = select(draws, seed=args.seed)
+    prediction_path = root / "data" / "predictions.csv"
+    predictions, current_prediction = record_prediction(
+        load_predictions(prediction_path), draws[-1], picks,
+    )
+    save_predictions(prediction_path, predictions)
+    picks = list(current_prediction.picks)
+    live_results = settle_predictions(predictions, draws)
     strategy, legacy_hits, random_hits, rows = run(
         draws, warmup=min(100, max(10, len(draws) // 2)),
         seed=args.seed, periods=args.backtest_periods,
@@ -37,7 +46,9 @@ def main() -> None:
     save_results(root / "data" / "results.csv", rows)
     save_report(
         root / "reports" / "latest.md",
-        render(draws, picks, strategy, random_hits, legacy_hits),
+        render(draws, picks, strategy, random_hits, legacy_hits,
+               live_results=live_results, backtest_rows=rows,
+               target_date=current_prediction.target_date),
     )
     print("建議：", *(" ".join(f"{n:02d}" for n in pick) for pick in picks), sep="\n")
 

@@ -1,7 +1,9 @@
+from datetime import date
 from pathlib import Path
 
 from .analysis import windows
 from .models import Draw
+from .performance import TICKET_PRICE, next_draw_date
 from .strategy import combo_factors, number_scores
 
 
@@ -9,24 +11,44 @@ def _two_plus(distribution: dict) -> int:
     return sum(count for hits, count in distribution.items() if hits >= 2)
 
 
+def _three_plus(distribution: dict) -> int:
+    return sum(count for hits, count in distribution.items() if hits >= 3)
+
+
 def _rate(count: int, total: int) -> str:
     return f"{count / total:.1%}" if total else "—"
 
 
+def _roi(cost: int, payout: int) -> str:
+    return f"{(payout - cost) / cost:.1%}" if cost else "—"
+
+
+def _backtest_financial_line(label: str, rows: list[dict], prefix: str) -> str:
+    cost = len(rows) * TICKET_PRICE * 2
+    payout = sum(int(row[f"{prefix}_payout"]) for row in rows)
+    return (f"- {label}：投入 {cost:,} 元、獎金 {payout:,} 元、"
+            f"淨損益 {payout - cost:+,} 元、ROI {_roi(cost, payout)}")
+
+
 def render(draws: list[Draw], picks: list[tuple[int, ...]], strategy: dict,
-           random_hits: dict, legacy_hits: dict | None = None) -> str:
+           random_hits: dict, legacy_hits: dict | None = None,
+           live_results: list[dict] | None = None,
+           backtest_rows: list[dict] | None = None,
+           target_date: date | None = None) -> str:
     analyses = windows(draws)
     latest = draws[-1]
     legacy_hits = legacy_hits or {}
+    live_results = live_results or []
+    backtest_rows = backtest_rows or []
+    target_date = target_date or next_draw_date(latest.date)
     scores = number_scores(draws)
     lines = [
         "# 今彩539 最新分析", "",
         f"資料截止：{latest.date.isoformat()}（{len(draws)} 期）", "",
-        "## 最新開獎結果", "",
-        f"- 開獎日期：{latest.date.isoformat()}",
-        f"- 期別：{latest.period}",
-        "- 開獎號碼：" + " ".join(f"{n:02d}" for n in latest.numbers), "",
-        "## 候選組合", "",
+        "## 下一期預測", "",
+        f"- 目標開獎日：{target_date.isoformat()}",
+        f"- 預測依據：截至 {latest.date.isoformat()} 第 {latest.period} 期", "",
+        "### 候選組合", "",
     ]
     for index, pick in enumerate(picks, 1):
         factors = combo_factors(draws, pick, scores)
@@ -38,9 +60,47 @@ def render(draws: list[Draw], picks: list[tuple[int, ...]], strategy: dict,
         ]
     lines += [
         "",
-        "> 分數只用於組合排序，不是中獎機率。兩組優先完全不重複，以涵蓋 10 個不同號碼。",
+        "> 相對分數只用於組合排序，不是中獎率。兩組優先完全不重複，以涵蓋 10 個不同號碼。",
         "",
-        "### 模型實際使用的資料", "",
+        "## 最新開獎結果", "",
+        f"- 開獎日期：{latest.date.isoformat()}",
+        f"- 期別：{latest.period}",
+        "- 開獎號碼：" + " ".join(f"{n:02d}" for n in latest.numbers),
+    ]
+
+    if live_results:
+        last = live_results[-1]
+        lines += ["", "### 上一期預測對獎", ""]
+        for index, (pick, hits) in enumerate(zip(last["picks"], last["ticket_hits"]), 1):
+            matched = sorted(set(pick) & set(last["actual"]))
+            matched_text = " ".join(f"{number:02d}" for number in matched) or "無"
+            lines.append(f"- 第 {index} 組：命中 {hits} 碼（{matched_text}）")
+        lines += [
+            f"- 當期投入：{last['cost']:,} 元",
+            f"- 當期獎金：{last['payout']:,} 元",
+            f"- 當期損益：{last['net']:+,} 元",
+        ]
+
+        live_cost = sum(row["cost"] for row in live_results)
+        live_payout = sum(row["payout"] for row in live_results)
+        prize_periods = sum(max(row["ticket_hits"]) >= 2 for row in live_results)
+        profit_periods = sum(row["net"] > 0 for row in live_results)
+        lines += [
+            "", "## 實戰累積績效", "",
+            f"- 已結算：{len(live_results)} 期",
+            f"- 累積投入：{live_cost:,} 元",
+            f"- 累積獎金：{live_payout:,} 元",
+            f"- 累積淨損益：{live_payout - live_cost:+,} 元",
+            f"- 實戰 ROI：{_roi(live_cost, live_payout)}",
+            f"- 達獎期數：{prize_periods}/{len(live_results)}；實際獲利期數："
+            f"{profit_periods}/{len(live_results)}",
+            "",
+            "> 中 2 碼不等於獲利；每期買兩組投入 100 元，單組中 2 碼只拿回 50 元。",
+        ]
+
+    lines += [
+        "",
+        "## 模型實際使用的資料", "",
         "- 單號：近 10、30、100 期與近 5 年頻率，先標準化再加權。",
         "- 遺漏：只給小幅且有上限的分數，不把久未開視為『該開了』。",
         "- 組合：近 100 期二碼、和值位置、尾數分散及與前期重號。",
@@ -68,18 +128,36 @@ def render(draws: list[Draw], picks: list[tuple[int, ...]], strategy: dict,
     strategy_two = _two_plus(strategy)
     legacy_two = _two_plus(legacy_hits)
     random_two = _two_plus(random_hits)
+    strategy_three = _three_plus(strategy)
+    legacy_three = _three_plus(legacy_hits)
+    random_three = _three_plus(random_hits)
     lines += [
         "", f"## 向前回測（最近 {tested_periods} 期）", "",
         "> 每一期只使用該期以前資料；各方法每期都取兩組中的最佳命中數。", "",
         f"- 重作模型：{dict(sorted(strategy.items()))}",
         f"- 舊版模型：{dict(sorted(legacy_hits.items()))}" if legacy_hits else "- 舊版模型：未提供",
-        f"- 單次隨機基準：{dict(sorted(random_hits.items()))}", "",
+        f"- 兩組不重複隨機基準：{dict(sorted(random_hits.items()))}", "",
         "### 至少中 2 碼", "",
         f"- 重作模型：{strategy_two}/{tested_periods}（{_rate(strategy_two, tested_periods)}）",
         f"- 舊版模型：{legacy_two}/{tested_periods}（{_rate(legacy_two, tested_periods)}）"
         if legacy_hits else "- 舊版模型：未提供",
-        f"- 單次隨機基準：{random_two}/{tested_periods}（{_rate(random_two, tested_periods)}）", "",
+        f"- 兩組不重複隨機基準：{random_two}/{tested_periods}（{_rate(random_two, tested_periods)}）", "",
+        "### 至少中 3 碼（單期必定獲利）", "",
+        f"- 重作模型：{strategy_three}/{tested_periods}（{_rate(strategy_three, tested_periods)}）",
+        f"- 舊版模型：{legacy_three}/{tested_periods}（{_rate(legacy_three, tested_periods)}）"
+        if legacy_hits else "- 舊版模型：未提供",
+        f"- 兩組不重複隨機基準：{random_three}/{tested_periods}（{_rate(random_three, tested_periods)}）", "",
     ]
+    if backtest_rows:
+        lines += [
+            "### 回測損益（每期兩組、每注 50 元）", "",
+            _backtest_financial_line("重作模型", backtest_rows, "strategy"),
+            _backtest_financial_line("舊版模型", backtest_rows, "legacy"),
+            _backtest_financial_line("兩組不重複隨機基準", backtest_rows, "random"),
+            "",
+            "> 回測 ROI 才反映投注成本與獎金；『至少中 2 碼』只代表達到最低獎項。",
+            "",
+        ]
     if legacy_hits:
         lines.append(f"> 本樣本重作模型比舊版多 {strategy_two - legacy_two:+d} 期至少中 2 碼；"
                      "這是歷史樣本結果，不代表下一期有優勢。")
