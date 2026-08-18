@@ -5,14 +5,12 @@ from .analysis import windows
 from .models import Draw
 from .performance import TICKET_PRICE, next_draw_date
 from .strategy import combo_factors, number_scores
+from .validation import (THREE_PLUS_RANDOM_PROBABILITY, assess_three_hit,
+                         three_plus_count)
 
 
 def _two_plus(distribution: dict) -> int:
     return sum(count for hits, count in distribution.items() if hits >= 2)
-
-
-def _three_plus(distribution: dict) -> int:
-    return sum(count for hits, count in distribution.items() if hits >= 3)
 
 
 def _rate(count: int, total: int) -> str:
@@ -42,13 +40,32 @@ def render(draws: list[Draw], picks: list[tuple[int, ...]], strategy: dict,
     backtest_rows = backtest_rows or []
     target_date = target_date or next_draw_date(latest.date)
     scores = number_scores(draws)
+    three_hit = assess_three_hit(strategy)
+    if not three_hit.periods:
+        gate_status = "資料不足；以下僅為研究候選，不建議下注"
+    elif three_hit.passed:
+        gate_status = "通過最低統計門檻；仍不代表下一期有優勢"
+    else:
+        gate_status = "未通過；以下僅為研究候選，不建議下注"
+    candidate_heading = ("### 候選組合（通過中 3 碼門檻）" if three_hit.passed
+                         else "### 研究候選組合（未達投注門檻）")
     lines = [
         "# 今彩539 最新分析", "",
         f"資料截止：{latest.date.isoformat()}（{len(draws)} 期）", "",
+        "## 中 3 碼目標判定", "",
+        "- 核心目標：每期兩組中，至少一組命中 3 碼以上。",
+        (f"- 最近 {three_hit.periods} 期模型：{three_hit.successes}/{three_hit.periods}"
+         f"（{_rate(three_hit.successes, three_hit.periods)}）"),
+        (f"- 兩組不重複隨機理論：{THREE_PLUS_RANDOM_PROBABILITY:.2%}"
+         f"（同樣期數預期 {three_hit.expected:.1f} 次）"),
+        (f"- 模型升級門檻：至少 {three_hit.threshold}/{three_hit.periods}"
+         "（單尾 5% 顯著水準）" if three_hit.periods else "- 模型升級門檻：等待足夠回測資料"),
+        f"- 判定：{gate_status}", "",
+        "> 門檻只代表最低統計證據，不是中獎保證；驗證方法與失敗實驗見 `reports/three-hit-validation.md`。", "",
         "## 下一期預測", "",
         f"- 目標開獎日：{target_date.isoformat()}",
         f"- 預測依據：截至 {latest.date.isoformat()} 第 {latest.period} 期", "",
-        "### 候選組合", "",
+        candidate_heading, "",
     ]
     for index, pick in enumerate(picks, 1):
         factors = combo_factors(draws, pick, scores)
@@ -128,25 +145,25 @@ def render(draws: list[Draw], picks: list[tuple[int, ...]], strategy: dict,
     strategy_two = _two_plus(strategy)
     legacy_two = _two_plus(legacy_hits)
     random_two = _two_plus(random_hits)
-    strategy_three = _three_plus(strategy)
-    legacy_three = _three_plus(legacy_hits)
-    random_three = _three_plus(random_hits)
+    strategy_three = three_plus_count(strategy)
+    legacy_three = three_plus_count(legacy_hits)
+    random_three = three_plus_count(random_hits)
     lines += [
         "", f"## 向前回測（最近 {tested_periods} 期）", "",
         "> 每一期只使用該期以前資料；各方法每期都取兩組中的最佳命中數。", "",
         f"- 重作模型：{dict(sorted(strategy.items()))}",
         f"- 舊版模型：{dict(sorted(legacy_hits.items()))}" if legacy_hits else "- 舊版模型：未提供",
         f"- 兩組不重複隨機基準：{dict(sorted(random_hits.items()))}", "",
-        "### 至少中 2 碼", "",
-        f"- 重作模型：{strategy_two}/{tested_periods}（{_rate(strategy_two, tested_periods)}）",
-        f"- 舊版模型：{legacy_two}/{tested_periods}（{_rate(legacy_two, tested_periods)}）"
-        if legacy_hits else "- 舊版模型：未提供",
-        f"- 兩組不重複隨機基準：{random_two}/{tested_periods}（{_rate(random_two, tested_periods)}）", "",
         "### 至少中 3 碼（單期必定獲利）", "",
         f"- 重作模型：{strategy_three}/{tested_periods}（{_rate(strategy_three, tested_periods)}）",
         f"- 舊版模型：{legacy_three}/{tested_periods}（{_rate(legacy_three, tested_periods)}）"
         if legacy_hits else "- 舊版模型：未提供",
         f"- 兩組不重複隨機基準：{random_three}/{tested_periods}（{_rate(random_three, tested_periods)}）", "",
+        "### 至少中 2 碼（僅達最低獎項）", "",
+        f"- 重作模型：{strategy_two}/{tested_periods}（{_rate(strategy_two, tested_periods)}）",
+        f"- 舊版模型：{legacy_two}/{tested_periods}（{_rate(legacy_two, tested_periods)}）"
+        if legacy_hits else "- 舊版模型：未提供",
+        f"- 兩組不重複隨機基準：{random_two}/{tested_periods}（{_rate(random_two, tested_periods)}）", "",
     ]
     if backtest_rows:
         lines += [
