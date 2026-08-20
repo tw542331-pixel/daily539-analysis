@@ -32,12 +32,14 @@ def tune_and_validate(
     seed: int = 539,
     top_n: int = 5,
 ) -> dict:
-    """Tune on older draws, then evaluate finalists on untouched recent 365 draws."""
+    """Tune on older draws, select once, then evaluate once on untouched recent draws."""
     minimum = 100 + TRAINING_PERIODS + VALIDATION_PERIODS
     if len(draws) < minimum:
         raise ValueError(
             f"need at least {minimum} draws for tuning + holdout validation; got {len(draws)}"
         )
+    if top_n < 1:
+        raise ValueError("top_n must be positive")
 
     validation_start = len(draws) - VALIDATION_PERIODS
     training_draws = draws[:validation_start]
@@ -50,31 +52,24 @@ def tune_and_validate(
         seed=seed,
     )
 
-    finalists = training_results[:top_n]
-    validation_results = []
+    training_leaders = training_results[:top_n]
+    if not training_leaders:
+        return {
+            "searched_configs": len(configs),
+            "training_periods": TRAINING_PERIODS,
+            "validation_periods": VALIDATION_PERIODS,
+            "top_n": top_n,
+            "training_leaders": [],
+            "selected": None,
+        }
 
-    for training_result in finalists:
-        config = training_result["config"]
-        validation_result = evaluate_config(
-            draws,
-            config,
-            periods=VALIDATION_PERIODS,
-            seed=seed,
-        )
-        validation_results.append({
-            "config": config,
-            "training": training_result,
-            "validation": validation_result,
-        })
-
-    validation_results.sort(
-        key=lambda result: (
-            result["validation"]["three_plus"],
-            result["validation"]["four_plus"],
-            result["validation"]["roi"],
-            result["validation"]["two_plus"],
-        ),
-        reverse=True,
+    selected_training = training_leaders[0]
+    selected_config = selected_training["config"]
+    validation_result = evaluate_config(
+        draws,
+        selected_config,
+        periods=VALIDATION_PERIODS,
+        seed=seed,
     )
 
     return {
@@ -82,6 +77,10 @@ def tune_and_validate(
         "training_periods": TRAINING_PERIODS,
         "validation_periods": VALIDATION_PERIODS,
         "top_n": top_n,
-        "results": validation_results,
-        "best": validation_results[0] if validation_results else None,
+        "training_leaders": training_leaders,
+        "selected": {
+            "config": selected_config,
+            "training": selected_training,
+            "validation": validation_result,
+        },
     }
