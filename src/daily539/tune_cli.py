@@ -17,12 +17,13 @@ def main() -> None:
     result = tune_and_validate(draws)
 
     lines = [
-        "# 今彩539 模型調參驗證",
+        "# 今彩539 中 3+ 直接優化驗證",
         "",
-        f"- 搜尋參數組數：{result['searched_configs']}",
+        f"- 模型：{result['model']}",
+        f"- 搜尋結構數：{result['searched_configs']}",
         f"- 訓練期數：{result['training_periods']}",
         f"- 保留驗證期數：{result['validation_periods']}",
-        f"- 顯示訓練排名數：{result['top_n']}",
+        f"- 升級門檻：至少 {result['promotion_threshold']}/{result['validation_periods']} 次中 3+",
         "",
         "## 訓練區排名",
         "",
@@ -32,7 +33,7 @@ def main() -> None:
         lines.extend([
             f"### 第 {rank} 名",
             "",
-            f"- 參數：`{_format_config(item['config'])}`",
+            f"- 結構：`{_format_config(item['config'])}`",
             f"- 訓練中 3+：{item['three_plus']}/{result['training_periods']}",
             f"- 訓練中 4+：{item['four_plus']}/{result['training_periods']}",
             f"- 訓練中 2+：{item['two_plus']}/{result['training_periods']}",
@@ -41,23 +42,22 @@ def main() -> None:
         ])
 
     selected = result["selected"]
-    lines.extend([
-        "## 保留驗證結果",
-        "",
-    ])
+    lines.extend(["## 保留驗證結果", ""])
     if selected is None:
         lines.append("- 無可用結果")
     else:
         valid = selected["validation"]
+        verdict = "通過，可進入升級候選" if result["promote"] else "未通過，維持目前每日模型"
         lines.extend([
-            f"- 事先選定參數：`{_format_config(selected['config'])}`",
+            f"- 事先選定結構：`{_format_config(selected['config'])}`",
             f"- 中 3+：{valid['three_plus']}/{result['validation_periods']} ({valid['three_plus'] / result['validation_periods']:.2%})",
             f"- 中 4+：{valid['four_plus']}/{result['validation_periods']}",
             f"- 中 2+：{valid['two_plus']}/{result['validation_periods']}",
             f"- ROI：{valid['roi']:.1%}",
             f"- 命中分布：{dict(sorted(valid['distribution'].items()))}",
+            f"- 判定：**{verdict}**",
             "",
-            "> 最終參數只依訓練區排名選定；最近 365 期僅驗證一次，不再用驗證結果挑參數。",
+            "> 最終結構只依訓練區排名選定；最近 365 期僅驗證一次。未達升級門檻不改每日模型。",
         ])
 
     path = Path("reports/tuning.md")
