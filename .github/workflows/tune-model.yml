@@ -13,7 +13,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: agent/parameterize-strategy
+          ref: ${{ github.ref_name }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -30,4 +30,4 @@ jobs:
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add reports/tuning.md
           git diff --cached --quiet || git commit -m "report: update model tuning results"
-          git push origin HEAD:agent/parameterize-strategy
+          git push origin HEAD:${GITHUB_REF_NAME}
