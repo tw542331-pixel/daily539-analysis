@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import random
 from collections import Counter
+from dataclasses import dataclass
 from datetime import timedelta
 from itertools import combinations
 from math import sqrt
@@ -12,7 +13,22 @@ from .models import Draw
 
 
 EXPECTED_NUMBER_RATE = 5 / 39
-WINDOW_WEIGHTS = {"10": 0.35, "30": 0.45, "100": 0.65, "5y": 0.25}
+
+
+@dataclass(frozen=True)
+class StrategyConfig:
+    weight_10: float = 0.35
+    weight_30: float = 0.45
+    weight_100: float = 0.65
+    weight_5y: float = 0.25
+    missing_weight: float = 0.15
+    pair_weight: float = 0.15
+    sum_weight: float = 0.15
+    tail_weight: float = 0.10
+    repeat_weight: float = 0.25
+
+
+DEFAULT_CONFIG = StrategyConfig()
 
 
 def valid_combo(combo: tuple[int, ...], interval: tuple[int, int]) -> bool:
@@ -34,7 +50,7 @@ def _window_draws(draws: list[Draw]) -> dict[str, list[Draw]]:
     }
 
 
-def number_scores(draws: list[Draw]) -> dict[int, float]:
+def number_scores(draws: list[Draw], config: StrategyConfig = DEFAULT_CONFIG) -> dict[int, float]:
     """Return comparable number signals; scores are rankings, not probabilities."""
     if not draws:
         raise ValueError("selection requires historical draws")
@@ -42,6 +58,12 @@ def number_scores(draws: list[Draw]) -> dict[int, float]:
     frequencies = {
         label: Counter(number for draw in sample for number in draw.numbers)
         for label, sample in samples.items()
+    }
+    weights = {
+        "10": config.weight_10,
+        "30": config.weight_30,
+        "100": config.weight_100,
+        "5y": config.weight_5y,
     }
     missing = snapshot(draws[-100:])["missing"]
     scores: dict[int, float] = {}
@@ -54,15 +76,14 @@ def number_scores(draws: list[Draw]) -> dict[int, float]:
             expected = size * EXPECTED_NUMBER_RATE
             deviation = sqrt(size * EXPECTED_NUMBER_RATE * (1 - EXPECTED_NUMBER_RATE))
             z_score = (frequencies[label][number] - expected) / deviation
-            score += WINDOW_WEIGHTS[label] * max(-3.0, min(3.0, z_score))
+            score += weights[label] * max(-3.0, min(3.0, z_score))
 
-        # Keep omission visible without treating an overdue number as "due".
-        score += 0.15 * min(missing[number], 15) / 15
+        score += config.missing_weight * min(missing[number], 15) / 15
         scores[number] = score
     return scores
 
 
-def _factor_context(draws: list[Draw], scores: dict[int, float]) -> dict:
+def _factor_context(draws: list[Draw], scores: dict[int, float], config: StrategyConfig) -> dict:
     recent = draws[-100:]
     pair_counts = Counter(pair for draw in recent for pair in combinations(draw.numbers, 2))
     pair_expected = len(recent) * 10 / 741
@@ -74,16 +95,18 @@ def _factor_context(draws: list[Draw], scores: dict[int, float]) -> dict:
         "sum_mean": mean(sums),
         "sum_deviation": pstdev(sums) or 1,
         "latest": set(draws[-1].numbers),
+        "config": config,
     }
 
 
 def _combo_factors(combo: tuple[int, ...], context: dict) -> dict[str, float]:
+    config = context["config"]
     pair_average = sum(context["pairs"][pair] for pair in combinations(combo, 2)) / 10
-    pair_signal = 0.15 * (pair_average - context["pair_expected"]) / sqrt(context["pair_expected"])
-    sum_signal = -0.15 * abs(sum(combo) - context["sum_mean"]) / context["sum_deviation"]
-    tail_signal = 0.10 * (len({number % 10 for number in combo}) - 3)
+    pair_signal = config.pair_weight * (pair_average - context["pair_expected"]) / sqrt(context["pair_expected"])
+    sum_signal = -config.sum_weight * abs(sum(combo) - context["sum_mean"]) / context["sum_deviation"]
+    tail_signal = config.tail_weight * (len({number % 10 for number in combo}) - 3)
     repeated = len(set(combo) & context["latest"])
-    repeat_signal = -0.25 * max(0, repeated - 1)
+    repeat_signal = -config.repeat_weight * max(0, repeated - 1)
     number_signal = sum(context["scores"][number] for number in combo)
     return {
         "number": number_signal,
@@ -96,22 +119,23 @@ def _combo_factors(combo: tuple[int, ...], context: dict) -> dict[str, float]:
 
 
 def combo_factors(draws: list[Draw], combo: tuple[int, ...],
-                  scores: dict[int, float] | None = None) -> dict[str, float]:
+                  scores: dict[int, float] | None = None,
+                  config: StrategyConfig = DEFAULT_CONFIG) -> dict[str, float]:
     """Break a combination score into reportable, auditable factors."""
-    scores = scores or number_scores(draws)
-    return _combo_factors(combo, _factor_context(draws, scores))
+    scores = scores or number_scores(draws, config)
+    return _combo_factors(combo, _factor_context(draws, scores, config))
 
 
-def select(draws: list[Draw], count: int = 2, seed: int | None = None) -> list[tuple[int, ...]]:
+def select(draws: list[Draw], count: int = 2, seed: int | None = None,
+           config: StrategyConfig = DEFAULT_CONFIG) -> list[tuple[int, ...]]:
     """Select deterministic, diversified candidates from a multi-factor rank."""
     del seed  # Kept for CLI/API compatibility; the model has no random tie-breaking.
     if not draws:
         raise ValueError("selection requires historical draws")
-    scores = number_scores(draws)
-    context = _factor_context(draws, scores)
+    scores = number_scores(draws, config)
+    context = _factor_context(draws, scores, config)
     ranked = sorted(range(1, 40), key=lambda number: (-scores[number], number))
 
-    # Only reject historically extreme sums; relative quality is scored below.
     interval = (45, 155)
     for pool_size in (18, 24, 39):
         candidates: list[tuple[float, tuple[int, ...]]] = []
