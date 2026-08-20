@@ -7,7 +7,117 @@ from pathlib import Path
 
 from .models import Draw
 from .performance import format_picks, payout_for_hits
-from .strategy import select, select_legacy
+from .strategy import StrategyConfig, select, select_legacy
+
+
+def evaluate_config(
+    draws: list[Draw],
+    config: StrategyConfig,
+    warmup: int = 100,
+    periods: int = 365,
+    seed: int = 539,
+) -> dict:
+    if periods < 1:
+        raise ValueError("backtest periods must be positive")
+
+    start = max(warmup, len(draws) - periods)
+    distribution = Counter()
+    total_payout = 0
+    rows = []
+
+    for index in range(start, len(draws)):
+        history = draws[:index]
+        actual = set(draws[index].numbers)
+
+        picks = select(
+            history,
+            seed=seed + index,
+            config=config,
+        )
+
+        ticket_hits = [
+            len(set(pick) & actual)
+            for pick in picks
+        ]
+        best_hits = max(ticket_hits)
+
+        distribution[best_hits] += 1
+        total_payout += payout_for_hits(ticket_hits)
+
+        rows.append({
+            "date": draws[index].date.isoformat(),
+            "period": draws[index].period,
+            "hits": best_hits,
+            "ticket_hits": ticket_hits,
+            "picks": picks,
+        })
+
+    tested_periods = sum(distribution.values())
+    investment = tested_periods * 100
+
+    three_plus = sum(
+        count
+        for hits, count in distribution.items()
+        if hits >= 3
+    )
+    four_plus = sum(
+        count
+        for hits, count in distribution.items()
+        if hits >= 4
+    )
+    two_plus = sum(
+        count
+        for hits, count in distribution.items()
+        if hits >= 2
+    )
+    roi = (
+        (total_payout - investment) / investment
+        if investment
+        else 0.0
+    )
+
+    return {
+        "config": config,
+        "distribution": distribution,
+        "three_plus": three_plus,
+        "four_plus": four_plus,
+        "two_plus": two_plus,
+        "payout": total_payout,
+        "investment": investment,
+        "roi": roi,
+        "rows": rows,
+    }
+
+
+def rank_configs(
+    draws: list[Draw],
+    configs: list[StrategyConfig],
+    warmup: int = 100,
+    periods: int = 365,
+    seed: int = 539,
+) -> list[dict]:
+    results = [
+        evaluate_config(
+            draws,
+            config,
+            warmup=warmup,
+            periods=periods,
+            seed=seed,
+        )
+        for config in configs
+    ]
+
+    results.sort(
+        key=lambda result: (
+            result["three_plus"],
+            result["four_plus"],
+            result["roi"],
+            result["two_plus"],
+        ),
+        reverse=True,
+    )
+
+    return results
 
 
 def run(draws: list[Draw], warmup: int = 100, seed: int = 539,
