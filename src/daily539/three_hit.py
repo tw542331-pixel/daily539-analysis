@@ -69,18 +69,25 @@ def select_three_hit(
     ranked_numbers = sorted(range(1, 40), key=lambda n: (-numbers[n], n))
     interval = (45, 155)
 
-    candidates: list[tuple[float, tuple[int, ...]]] = []
-    for values in combinations(ranked_numbers[:config.pool_size], 5):
-        combo = tuple(sorted(values))
-        if valid_combo(combo, interval):
-            candidates.append((_combo_score(combo, triples, numbers, config), combo))
-    candidates.sort(key=lambda item: (-item[0], item[1]))
+    pool_sizes = []
+    for pool_size in (config.pool_size, 18, 24, 39):
+        resolved = min(39, max(config.pool_size, pool_size))
+        if resolved not in pool_sizes:
+            pool_sizes.append(resolved)
 
-    selected: list[tuple[int, ...]] = []
-    for _, combo in candidates:
-        if all(len(set(combo) & set(previous)) <= config.max_overlap for previous in selected):
-            selected.append(combo)
-        if len(selected) == count:
-            return selected
+    for pool_size in pool_sizes:
+        candidates: list[tuple[float, tuple[int, ...]]] = []
+        for values in combinations(ranked_numbers[:pool_size], 5):
+            combo = tuple(sorted(values))
+            if valid_combo(combo, interval):
+                candidates.append((_combo_score(combo, triples, numbers, config), combo))
+        candidates.sort(key=lambda item: (-item[0], item[1]))
+
+        selected: list[tuple[int, ...]] = []
+        for _, combo in candidates:
+            if all(len(set(combo) & set(previous)) <= config.max_overlap for previous in selected):
+                selected.append(combo)
+            if len(selected) == count:
+                return selected
 
     raise ValueError("three-hit constraints produced too few combinations")
