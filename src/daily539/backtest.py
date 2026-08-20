@@ -4,15 +4,18 @@ import csv
 import random
 from collections import Counter
 from pathlib import Path
+from typing import Callable
 
 from .models import Draw
 from .performance import format_picks, payout_for_hits
 from .strategy import StrategyConfig, select, select_legacy
+from .three_hit import ThreeHitConfig, select_three_hit
 
 
-def evaluate_config(
+def _evaluate_selector(
     draws: list[Draw],
-    config: StrategyConfig,
+    config,
+    selector: Callable,
     warmup: int = 100,
     periods: int = 365,
     seed: int = 539,
@@ -28,22 +31,11 @@ def evaluate_config(
     for index in range(start, len(draws)):
         history = draws[:index]
         actual = set(draws[index].numbers)
-
-        picks = select(
-            history,
-            seed=seed + index,
-            config=config,
-        )
-
-        ticket_hits = [
-            len(set(pick) & actual)
-            for pick in picks
-        ]
+        picks = selector(history, seed=seed + index, config=config)
+        ticket_hits = [len(set(pick) & actual) for pick in picks]
         best_hits = max(ticket_hits)
-
         distribution[best_hits] += 1
         total_payout += payout_for_hits(ticket_hits)
-
         rows.append({
             "date": draws[index].date.isoformat(),
             "period": draws[index].period,
@@ -54,27 +46,10 @@ def evaluate_config(
 
     tested_periods = sum(distribution.values())
     investment = tested_periods * 100
-
-    three_plus = sum(
-        count
-        for hits, count in distribution.items()
-        if hits >= 3
-    )
-    four_plus = sum(
-        count
-        for hits, count in distribution.items()
-        if hits >= 4
-    )
-    two_plus = sum(
-        count
-        for hits, count in distribution.items()
-        if hits >= 2
-    )
-    roi = (
-        (total_payout - investment) / investment
-        if investment
-        else 0.0
-    )
+    three_plus = sum(count for hits, count in distribution.items() if hits >= 3)
+    four_plus = sum(count for hits, count in distribution.items() if hits >= 4)
+    two_plus = sum(count for hits, count in distribution.items() if hits >= 2)
+    roi = ((total_payout - investment) / investment if investment else 0.0)
 
     return {
         "config": config,
@@ -89,6 +64,39 @@ def evaluate_config(
     }
 
 
+def evaluate_config(
+    draws: list[Draw],
+    config: StrategyConfig,
+    warmup: int = 100,
+    periods: int = 365,
+    seed: int = 539,
+) -> dict:
+    return _evaluate_selector(draws, config, select, warmup, periods, seed)
+
+
+def evaluate_three_hit_config(
+    draws: list[Draw],
+    config: ThreeHitConfig,
+    warmup: int = 100,
+    periods: int = 365,
+    seed: int = 539,
+) -> dict:
+    return _evaluate_selector(draws, config, select_three_hit, warmup, periods, seed)
+
+
+def _rank(results: list[dict]) -> list[dict]:
+    results.sort(
+        key=lambda result: (
+            result["three_plus"],
+            result["four_plus"],
+            result["two_plus"],
+            result["roi"],
+        ),
+        reverse=True,
+    )
+    return results
+
+
 def rank_configs(
     draws: list[Draw],
     configs: list[StrategyConfig],
@@ -96,28 +104,23 @@ def rank_configs(
     periods: int = 365,
     seed: int = 539,
 ) -> list[dict]:
-    results = [
-        evaluate_config(
-            draws,
-            config,
-            warmup=warmup,
-            periods=periods,
-            seed=seed,
-        )
+    return _rank([
+        evaluate_config(draws, config, warmup=warmup, periods=periods, seed=seed)
         for config in configs
-    ]
+    ])
 
-    results.sort(
-        key=lambda result: (
-            result["three_plus"],
-            result["four_plus"],
-            result["roi"],
-            result["two_plus"],
-        ),
-        reverse=True,
-    )
 
-    return results
+def rank_three_hit_configs(
+    draws: list[Draw],
+    configs: list[ThreeHitConfig],
+    warmup: int = 100,
+    periods: int = 365,
+    seed: int = 539,
+) -> list[dict]:
+    return _rank([
+        evaluate_three_hit_config(draws, config, warmup=warmup, periods=periods, seed=seed)
+        for config in configs
+    ])
 
 
 def run(draws: list[Draw], warmup: int = 100, seed: int = 539,
@@ -128,7 +131,7 @@ def run(draws: list[Draw], warmup: int = 100, seed: int = 539,
     rng = random.Random(seed)
     start = max(warmup, len(draws) - periods)
     for index in range(start, len(draws)):
-        history, actual = draws[:index], set(draws[index].numbers)  # strictly earlier draws only
+        history, actual = draws[:index], set(draws[index].numbers)
         picks = select(history, seed=seed + index)
         legacy_picks = select_legacy(history, seed=seed + index)
         random_numbers = rng.sample(range(1, 40), 10)
