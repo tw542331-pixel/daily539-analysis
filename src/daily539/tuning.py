@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from .backtest import evaluate_three_hit_config, rank_three_hit_configs
+from .backtest import (evaluate_three_hit_config as evaluate_config,
+                       rank_three_hit_configs as rank_configs)
 from .models import Draw
 from .three_hit import ThreeHitConfig
 from .validation import promotion_threshold
@@ -41,7 +42,7 @@ def tune_and_validate(
     validation_start = len(draws) - VALIDATION_PERIODS
     training_draws = draws[:validation_start]
     configs = candidate_configs()
-    training_results = rank_three_hit_configs(
+    training_results = rank_configs(
         training_draws,
         configs,
         periods=TRAINING_PERIODS,
@@ -64,7 +65,7 @@ def tune_and_validate(
 
     selected_training = training_leaders[0]
     selected_config = selected_training["config"]
-    validation_result = evaluate_three_hit_config(
+    validation_result = evaluate_config(
         draws,
         selected_config,
         periods=VALIDATION_PERIODS,
