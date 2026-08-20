@@ -10,7 +10,8 @@ from daily539.performance import (Prediction, load_predictions, next_draw_date,
                                   settle_predictions)
 from daily539.report import render
 from daily539.source import _parse_record, _records
-from daily539.strategy import combo_factors, select, valid_combo
+from daily539.strategy import StrategyConfig, combo_factors, select, valid_combo
+from daily539.tuning import tune_and_validate
 from daily539.validation import (THREE_PLUS_RANDOM_PROBABILITY,
                                  assess_three_hit, promotion_threshold)
 
@@ -149,6 +150,40 @@ def test_backtest_can_limit_recent_periods(monkeypatch):
 def test_backtest_rejects_non_positive_periods():
     with pytest.raises(ValueError, match="positive"):
         run(draws(30), periods=0)
+
+
+def test_tuning_selects_config_before_holdout(monkeypatch):
+    first = StrategyConfig(weight_10=0.20)
+    second = StrategyConfig(weight_10=0.50)
+    training_results = [
+        {"config": first, "three_plus": 12, "four_plus": 1, "two_plus": 160, "roi": -0.70},
+        {"config": second, "three_plus": 11, "four_plus": 2, "two_plus": 170, "roi": -0.65},
+    ]
+    evaluated = []
+
+    monkeypatch.setattr("daily539.tuning.candidate_configs", lambda: [first, second])
+    monkeypatch.setattr("daily539.tuning.rank_configs", lambda *args, **kwargs: training_results)
+
+    def fake_evaluate(draw_history, config, **kwargs):
+        evaluated.append(config)
+        return {
+            "config": config,
+            "distribution": {0: 100, 1: 180, 2: 80, 3: 5},
+            "three_plus": 5,
+            "four_plus": 0,
+            "two_plus": 85,
+            "payout": 0,
+            "investment": 36500,
+            "roi": -1.0,
+            "rows": [],
+        }
+
+    monkeypatch.setattr("daily539.tuning.evaluate_config", fake_evaluate)
+    result = tune_and_validate(draws(1200), top_n=2)
+
+    assert evaluated == [first]
+    assert result["selected"]["config"] == first
+    assert result["training_leaders"][0]["config"] == first
 
 
 def test_three_hit_random_probability_and_promotion_threshold():
