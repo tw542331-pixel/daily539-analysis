@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from itertools import product
-
 from .backtest import evaluate_config, rank_configs
 from .models import Draw
 from .strategy import StrategyConfig
@@ -12,45 +10,29 @@ VALIDATION_PERIODS = 365
 
 
 def candidate_configs() -> list[StrategyConfig]:
-    """Generate a deliberately small search grid to limit overfitting and runtime."""
-    frequency_weights = (0.20, 0.35, 0.50, 0.65)
-    long_weights = (0.10, 0.25, 0.40)
-    small_weights = (0.00, 0.10, 0.20)
-
-    configs: list[StrategyConfig] = []
-    for w10, w30, w100, w5y, missing, pair, sum_w, tail, repeat in product(
-        frequency_weights,
-        frequency_weights,
-        frequency_weights,
-        long_weights,
-        small_weights,
-        small_weights,
-        small_weights,
-        small_weights,
-        small_weights,
-    ):
-        configs.append(
-            StrategyConfig(
-                weight_10=w10,
-                weight_30=w30,
-                weight_100=w100,
-                weight_5y=w5y,
-                missing_weight=missing,
-                pair_weight=pair,
-                sum_weight=sum_w,
-                tail_weight=tail,
-                repeat_weight=repeat,
-            )
-        )
-    return configs
+    """Return a small, auditable candidate set to reduce runtime and overfitting."""
+    return [
+        StrategyConfig(),
+        StrategyConfig(weight_10=0.20, weight_30=0.35, weight_100=0.65, weight_5y=0.25),
+        StrategyConfig(weight_10=0.20, weight_30=0.50, weight_100=0.65, weight_5y=0.10),
+        StrategyConfig(weight_10=0.35, weight_30=0.50, weight_100=0.50, weight_5y=0.10),
+        StrategyConfig(weight_10=0.50, weight_30=0.35, weight_100=0.35, weight_5y=0.10),
+        StrategyConfig(weight_10=0.20, weight_30=0.35, weight_100=0.50, weight_5y=0.40),
+        StrategyConfig(missing_weight=0.00),
+        StrategyConfig(missing_weight=0.30),
+        StrategyConfig(pair_weight=0.00),
+        StrategyConfig(pair_weight=0.30),
+        StrategyConfig(sum_weight=0.00, tail_weight=0.00, repeat_weight=0.00),
+        StrategyConfig(pair_weight=0.30, sum_weight=0.00, tail_weight=0.00, repeat_weight=0.00),
+    ]
 
 
 def tune_and_validate(
     draws: list[Draw],
     seed: int = 539,
-    top_n: int = 10,
+    top_n: int = 5,
 ) -> dict:
-    """Tune only on older draws, then evaluate untouched recent 365 draws."""
+    """Tune on older draws, then evaluate finalists on untouched recent 365 draws."""
     minimum = 100 + TRAINING_PERIODS + VALIDATION_PERIODS
     if len(draws) < minimum:
         raise ValueError(
