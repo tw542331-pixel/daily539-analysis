@@ -1,59 +1,61 @@
-# 今彩539 模型調參驗證
+# 今彩539 中 3+ 直接優化驗證
 
-- 搜尋參數組數：12
+- 模型：three_hit_optimizer
+- 搜尋結構數：8
 - 訓練期數：730
 - 保留驗證期數：365
-- 顯示訓練排名數：5
+- 升級門檻：至少 13/365 次中 3+
 
 ## 訓練區排名
 
 ### 第 1 名
 
-- 參數：`weight_10=0.5, weight_30=0.35, weight_100=0.35, weight_5y=0.1, missing_weight=0.15, pair_weight=0.15, sum_weight=0.15, tail_weight=0.1, repeat_weight=0.25`
-- 訓練中 3+：17/730
+- 結構：`window=60, pool_size=14, triple_weight=1.0, number_weight=0.35, max_overlap=0`
+- 訓練中 3+：18/730
 - 訓練中 4+：1/730
-- 訓練中 2+：160/730
-- 訓練 ROI：-56.1%
+- 訓練中 2+：176/730
+- 訓練 ROI：-54.5%
 
 ### 第 2 名
 
-- 參數：`weight_10=0.2, weight_30=0.5, weight_100=0.65, weight_5y=0.1, missing_weight=0.15, pair_weight=0.15, sum_weight=0.15, tail_weight=0.1, repeat_weight=0.25`
-- 訓練中 3+：17/730
+- 結構：`window=200, pool_size=16, triple_weight=1.0, number_weight=0.35, max_overlap=0`
+- 訓練中 3+：18/730
 - 訓練中 4+：0/730
-- 訓練中 2+：176/730
-- 訓練 ROI：-82.0%
+- 訓練中 2+：160/730
+- 訓練 ROI：-82.5%
 
 ### 第 3 名
 
-- 參數：`weight_10=0.35, weight_30=0.45, weight_100=0.65, weight_5y=0.25, missing_weight=0.15, pair_weight=0.15, sum_weight=0.0, tail_weight=0.0, repeat_weight=0.0`
+- 結構：`window=100, pool_size=16, triple_weight=1.0, number_weight=0.35, max_overlap=0`
 - 訓練中 3+：15/730
 - 訓練中 4+：0/730
-- 訓練中 2+：174/730
-- 訓練 ROI：-82.7%
+- 訓練中 2+：172/730
+- 訓練 ROI：-82.9%
 
 ### 第 4 名
 
-- 參數：`weight_10=0.35, weight_30=0.5, weight_100=0.5, weight_5y=0.1, missing_weight=0.15, pair_weight=0.15, sum_weight=0.15, tail_weight=0.1, repeat_weight=0.25`
+- 結構：`window=30, pool_size=14, triple_weight=1.0, number_weight=0.35, max_overlap=0`
 - 訓練中 3+：14/730
-- 訓練中 4+：0/730
-- 訓練中 2+：181/730
-- 訓練 ROI：-82.6%
+- 訓練中 4+：1/730
+- 訓練中 2+：178/730
+- 訓練 ROI：-55.6%
 
 ### 第 5 名
 
-- 參數：`weight_10=0.35, weight_30=0.45, weight_100=0.65, weight_5y=0.25, missing_weight=0.15, pair_weight=0.15, sum_weight=0.15, tail_weight=0.1, repeat_weight=0.25`
+- 結構：`window=60, pool_size=12, triple_weight=1.0, number_weight=0.2, max_overlap=0`
 - 訓練中 3+：14/730
 - 訓練中 4+：0/730
-- 訓練中 2+：166/730
-- 訓練 ROI：-83.6%
+- 訓練中 2+：176/730
+- 訓練 ROI：-82.9%
 
 ## 保留驗證結果
 
-- 事先選定參數：`weight_10=0.5, weight_30=0.35, weight_100=0.35, weight_5y=0.1, missing_weight=0.15, pair_weight=0.15, sum_weight=0.15, tail_weight=0.1, repeat_weight=0.25`
-- 中 3+：5/365 (1.37%)
+- 事先選定結構：`window=60, pool_size=14, triple_weight=1.0, number_weight=0.35, max_overlap=0`
+- 中 3+：6/365 (1.64%)
 - 中 4+：0/365
-- 中 2+：81/365
-- ROI：-85.5%
-- 命中分布：{0: 78, 1: 206, 2: 76, 3: 5}
+- 中 2+：62/365
+- ROI：-87.4%
+- 命中分布：{0: 73, 1: 230, 2: 56, 3: 6}
+- 判定：**未通過，維持目前每日模型**
 
-> 最終參數只依訓練區排名選定；最近 365 期僅驗證一次，不再用驗證結果挑參數。
+> 最終結構只依訓練區排名選定；最近 365 期僅驗證一次。未達升級門檻不改每日模型。
